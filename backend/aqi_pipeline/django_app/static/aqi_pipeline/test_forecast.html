@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AQI Forecast Tester</title>
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --panel: #ffffff;
+      --ink: #172336;
+      --muted: #5d6d84;
+      --line: #d6dfec;
+      --accent: #0b69d7;
+      --ok: #1a7f37;
+      --err: #cf222e;
+    }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 0% 0%, #dce9ff 0%, var(--bg) 42%, #edf3fb 100%);
+      font-family: "Segoe UI", Roboto, sans-serif;
+      color: var(--ink);
+    }
+    .wrap {
+      max-width: 900px;
+      margin: 28px auto;
+      padding: 0 14px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+      box-shadow: 0 10px 24px rgba(11, 36, 79, 0.09);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+    }
+    .hint {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .full {
+      grid-column: 1 / -1;
+    }
+    label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    input, select {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 15px;
+      color: var(--ink);
+      background: #fff;
+    }
+    .actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    button {
+      border: 0;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      padding: 10px 14px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    button.alt {
+      background: #5a6980;
+    }
+    .status {
+      margin-top: 12px;
+      font-size: 14px;
+    }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+    .summary {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fbff;
+      padding: 10px;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+    table {
+      width: 100%;
+      margin-top: 12px;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 8px 6px;
+      text-align: left;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+    }
+    pre {
+      margin-top: 12px;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      background: #0f1c2f;
+      color: #d7e7ff;
+      overflow: auto;
+    }
+    @media (max-width: 700px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>AQI Forecast Tester</h1>
+      <p class="hint">Test <code>/api/v1/forecast</code> for any latitude/longitude directly from browser.</p>
+
+      <div class="grid">
+        <div class="row full">
+          <label for="baseUrl">API Base URL</label>
+          <input id="baseUrl" value="http://localhost:8080">
+        </div>
+        <div class="row full">
+          <label for="apiKey">API Key</label>
+          <input id="apiKey" placeholder="paste AQI_API_KEYS value">
+        </div>
+        <div class="row">
+          <label for="lat">Latitude</label>
+          <input id="lat" type="number" step="any" value="28.6139">
+        </div>
+        <div class="row">
+          <label for="lon">Longitude</label>
+          <input id="lon" type="number" step="any" value="77.2090">
+        </div>
+        <div class="row">
+          <label for="hours">Forecast Duration</label>
+          <select id="hours">
+            <option value="12" selected>12 hours</option>
+            <option value="24">24 hours</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="debug">Debug Trace</label>
+          <select id="debug">
+            <option value="false" selected>false</option>
+            <option value="true">true</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="runBtn" type="button">Fetch Forecast</button>
+        <button id="clearBtn" class="alt" type="button">Clear</button>
+      </div>
+
+      <div id="status" class="status"></div>
+      <div id="summary" class="summary"></div>
+      <table id="table" hidden>
+        <thead>
+          <tr>
+            <th>Hour</th>
+            <th>Timestamp (UTC)</th>
+            <th>AQI</th>
+            <th>AQI Raw</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <pre id="raw"></pre>
+    </div>
+  </div>
+
+  <script>
+    const baseUrlEl = document.getElementById("baseUrl");
+    const apiKeyEl = document.getElementById("apiKey");
+    const latEl = document.getElementById("lat");
+    const lonEl = document.getElementById("lon");
+    const hoursEl = document.getElementById("hours");
+    const debugEl = document.getElementById("debug");
+    const statusEl = document.getElementById("status");
+    const summaryEl = document.getElementById("summary");
+    const tableEl = document.getElementById("table");
+    const tbodyEl = document.getElementById("tbody");
+    const rawEl = document.getElementById("raw");
+      const runBtn = document.getElementById("runBtn");
+      const clearBtn = document.getElementById("clearBtn");
+      const STORAGE_KEY_BASE = "aqi.forecast.baseUrl";
+      const STORAGE_KEY_API_KEY = "aqi.forecast.apiKey";
+
+      const savedBase = localStorage.getItem(STORAGE_KEY_BASE);
+      const savedKey = localStorage.getItem(STORAGE_KEY_API_KEY);
+      if (savedBase) {
+        baseUrlEl.value = savedBase;
+      }
+      if (savedKey) {
+        apiKeyEl.value = savedKey;
+      }
+
+    function setStatus(text, kind) {
+      statusEl.textContent = text;
+      statusEl.className = "status " + (kind || "");
+    }
+
+    function clearAll() {
+      setStatus("", "");
+      summaryEl.textContent = "";
+      tbodyEl.innerHTML = "";
+      tableEl.hidden = true;
+      rawEl.textContent = "";
+    }
+
+    function buildSummary(payload) {
+      return [
+        `Source: ${payload.source || "-"}`,
+        `Cached: ${String(payload.cached)}`,
+        `Current AQI: ${payload.current_aqi} (raw: ${payload.current_aqi_raw})`,
+        `H3: ${payload.h3_index || "-"}`,
+        `Duration: ${payload.hours || "-"}h`,
+        `Elapsed: ${payload.elapsed_ms || "-"} ms`,
+        `Version: ${payload.version || "-"}`,
+      ].join("\n");
+    }
+
+    function renderRows(forecast) {
+      tbodyEl.innerHTML = "";
+      for (const row of forecast) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${row.hour ?? "-"}</td>
+          <td>${row.timestamp_utc ?? "-"}</td>
+          <td>${row.aqi ?? "-"}</td>
+          <td>${row.aqi_raw ?? "-"}</td>
+        `;
+        tbodyEl.appendChild(tr);
+      }
+      tableEl.hidden = forecast.length === 0;
+    }
+
+    async function fetchForecast() {
+      clearAll();
+      setStatus("Requesting forecast...", "");
+
+      const lat = Number(latEl.value);
+      const lon = Number(lonEl.value);
+      const hours = Number(hoursEl.value);
+      const debug = debugEl.value === "true";
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        setStatus("Latitude and longitude must be valid numbers.", "err");
+        return;
+      }
+      if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+        setStatus("Latitude or longitude is out of range.", "err");
+        return;
+      }
+
+      const base = baseUrlEl.value.trim().replace(/\/+$/, "");
+      if (!base) {
+        setStatus("API Base URL is required.", "err");
+        return;
+      }
+      const url = new URL(`${base}/api/v1/forecast`);
+      url.searchParams.set("lat", String(lat));
+      url.searchParams.set("lon", String(lon));
+      url.searchParams.set("hours", String(hours));
+      url.searchParams.set("debug", String(debug));
+
+      const headers = {};
+      const apiKey = apiKeyEl.value.trim();
+      if (apiKey) {
+        headers["Authorization"] = apiKey.startsWith("Bearer ") ? apiKey : `Bearer ${apiKey}`;
+      }
+
+      localStorage.setItem(STORAGE_KEY_BASE, base);
+      localStorage.setItem(STORAGE_KEY_API_KEY, apiKey);
+
+      try {
+        const res = await fetch(url.toString(), { method: "GET", headers });
+        const payload = await res.json().catch(() => ({}));
+        rawEl.textContent = JSON.stringify(payload, null, 2);
+
+        if (!res.ok) {
+          const detail = payload?.detail;
+          const msg = typeof detail === "string"
+            ? detail
+            : (detail?.message || payload?.message || `Request failed (${res.status})`);
+          setStatus(msg, "err");
+          return;
+        }
+
+        const forecast = Array.isArray(payload?.forecast) ? payload.forecast : [];
+        summaryEl.textContent = buildSummary(payload);
+        renderRows(forecast);
+        setStatus("Forecast loaded successfully.", "ok");
+      } catch (err) {
+        setStatus(`Network error: ${err?.message || err}`, "err");
+      }
+    }
+
+    runBtn.addEventListener("click", fetchForecast);
+    clearBtn.addEventListener("click", clearAll);
+  </script>
+</body>
+</html>

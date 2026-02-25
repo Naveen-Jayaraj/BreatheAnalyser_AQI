@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AQI Test Lookup</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --text: #162236;
+      --muted: #5c6b80;
+      --accent: #1f6feb;
+      --ok: #1f883d;
+      --err: #d1242f;
+      --border: #d8e0ec;
+    }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Roboto, sans-serif;
+      background: radial-gradient(circle at top left, #e7f0ff 0%, var(--bg) 45%, #edf2f9 100%);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 760px;
+      margin: 40px auto;
+      padding: 0 16px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 10px 30px rgba(10, 20, 40, 0.08);
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 24px;
+    }
+    p.help {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1fr 1fr;
+    }
+    .row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .row.full {
+      grid-column: 1 / -1;
+    }
+    label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    input {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 15px;
+    }
+    button {
+      margin-top: 14px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      padding: 10px 14px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    .status {
+      margin-top: 14px;
+      font-size: 14px;
+    }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+    .aqi {
+      margin-top: 12px;
+      font-size: 28px;
+      font-weight: 700;
+    }
+    .details {
+      margin-top: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      background: #f9fbff;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+    pre {
+      margin-top: 12px;
+      background: #0f1a2b;
+      color: #d7e4ff;
+      padding: 12px;
+      border-radius: 8px;
+      overflow: auto;
+      font-size: 12px;
+    }
+    @media (max-width: 640px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>AQI Test Lookup</h1>
+      <p class="help">Enter coordinates and call the FastAPI backend AQI endpoint.</p>
+
+      <div class="grid">
+        <div class="row full">
+          <label for="baseUrl">API Base URL</label>
+          <input id="baseUrl" value="http://localhost:8080" />
+        </div>
+        <div class="row full">
+          <label for="endpointPath">Endpoint Path</label>
+          <input id="endpointPath" value="/api/v1/aqi/lookup" />
+        </div>
+        <div class="row full">
+          <label for="apiKey">API Key (AQI_API_KEYS value)</label>
+          <input id="apiKey" placeholder="paste backend API key" />
+        </div>
+        <div class="row">
+          <label for="lat">Latitude</label>
+          <input id="lat" type="number" step="any" value="28.6139" />
+        </div>
+        <div class="row">
+          <label for="lon">Longitude</label>
+          <input id="lon" type="number" step="any" value="77.2090" />
+        </div>
+      </div>
+
+      <button id="runBtn" type="button">Fetch AQI</button>
+
+      <div id="status" class="status"></div>
+      <div id="aqi" class="aqi"></div>
+      <div id="details" class="details"></div>
+      <pre id="raw"></pre>
+    </div>
+  </div>
+
+  <script>
+    const baseUrlEl = document.getElementById("baseUrl");
+    const endpointPathEl = document.getElementById("endpointPath");
+    const apiKeyEl = document.getElementById("apiKey");
+    const latEl = document.getElementById("lat");
+    const lonEl = document.getElementById("lon");
+    const statusEl = document.getElementById("status");
+    const aqiEl = document.getElementById("aqi");
+    const detailsEl = document.getElementById("details");
+    const rawEl = document.getElementById("raw");
+    const runBtn = document.getElementById("runBtn");
+
+    function setStatus(msg, kind) {
+      statusEl.textContent = msg;
+      statusEl.className = "status " + (kind || "");
+    }
+
+    async function runLookup() {
+      setStatus("Requesting AQI...", "");
+      aqiEl.textContent = "";
+      detailsEl.textContent = "";
+      rawEl.textContent = "";
+
+      const latitude = Number(latEl.value);
+      const longitude = Number(lonEl.value);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        setStatus("Latitude/longitude must be numeric.", "err");
+        return;
+      }
+
+      const base = baseUrlEl.value.trim().replace(/\/+$/, "");
+      const endpointPath = endpointPathEl.value.trim();
+      if (!base) {
+        setStatus("API Base URL is required.", "err");
+        return;
+      }
+      if (!endpointPath) {
+        setStatus("Endpoint Path is required.", "err");
+        return;
+      }
+
+      let url = "";
+      try {
+        url = endpointPath.startsWith("http://") || endpointPath.startsWith("https://")
+          ? endpointPath
+          : `${base}${endpointPath.startsWith("/") ? "" : "/"}${endpointPath}`;
+      } catch (err) {
+        setStatus(`Invalid URL: ${err?.message || err}`, "err");
+        return;
+      }
+
+      const headers = { "Content-Type": "application/json" };
+      const apiKey = apiKeyEl.value.trim();
+      if (apiKey) {
+        headers["Authorization"] = apiKey.startsWith("Bearer ") ? apiKey : `Bearer ${apiKey}`;
+      }
+
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ latitude, longitude, include_trace: true }),
+        });
+
+        const data = await response.json().catch(() => ({}));
+        rawEl.textContent = JSON.stringify(data, null, 2);
+        detailsEl.textContent = renderDetails(data);
+
+        if (!response.ok) {
+          const detail = data?.detail;
+          const message = typeof detail === "string"
+            ? detail
+            : (detail?.message || data?.message || data?.error?.message || `Request failed (${response.status})`);
+          setStatus(message, "err");
+          return;
+        }
+
+        const aqi = data?.aqi;
+        const category = data?.category || "unknown";
+        aqiEl.textContent = typeof aqi === "number" ? `AQI: ${aqi} (${category})` : "AQI not found in response.";
+        setStatus("Success", "ok");
+      } catch (err) {
+        setStatus(`Network error: ${err?.message || err}`, "err");
+      }
+    }
+
+    function renderDetails(payload) {
+      const trace = payload?.trace || {};
+      const input = trace?.input || {};
+      const weather = trace?.weather || {};
+      const weatherData = weather?.data || {};
+      const landUse = trace?.land_use || {};
+      const sensors = trace?.sensors || {};
+      const comp = trace?.computation || {};
+      const preview = Array.isArray(sensors?.preview) ? sensors.preview : [];
+
+      const sensorLines = preview.slice(0, 5).map((s, idx) => {
+        return `${idx + 1}. AQI ${s.aqi} at (${s.latitude}, ${s.longitude}) dist=${s.distance_km}km`;
+      });
+      if (!sensorLines.length) {
+        sensorLines.push("No nearby sensors in response.");
+      }
+
+      return [
+        `H3 Index: ${input.h3_index || "-"}`,
+        ``,
+        `Weather [${weather.status || "-"}]`,
+        `  temp: ${valueOrDash(weatherData.temperature_2m)}`,
+        `  humidity: ${valueOrDash(weatherData.relative_humidity_2m)}`,
+        `  wind speed: ${valueOrDash(weatherData.wind_speed_10m)}`,
+        `  wind direction: ${valueOrDash(weatherData.wind_direction_10m)}`,
+        `  rain: ${valueOrDash(weatherData.rain)}`,
+        weather.error ? `  weather error: ${weather.error}` : "",
+        ``,
+        `Land Use [${landUse.status || "-"}]: ${landUse.category || "-"}`,
+        landUse.error ? `  land-use error: ${landUse.error}` : "",
+        ``,
+        `Sensors [${sensors.status || "-"}]: count=${valueOrDash(sensors.count)} radius=${valueOrDash(sensors.radius_km)}km`,
+        ...sensorLines.map((line) => `  ${line}`),
+        sensors.error ? `  sensor error: ${sensors.error}` : "",
+        ``,
+        `Computation [${comp.status || "-"}]`,
+        `  IDW base: ${valueOrDash(comp.idw_base_aqi)}`,
+        `  after advection: ${valueOrDash(comp.after_advection)}`,
+        `  after diffusion: ${valueOrDash(comp.after_diffusion)}`,
+        `  after humidity: ${valueOrDash(comp.after_humidity)}`,
+        `  after rain: ${valueOrDash(comp.after_rain)}`,
+        `  after land-use: ${valueOrDash(comp.after_land_use)}`,
+        `  after stability: ${valueOrDash(comp.after_stability)}`,
+        `  final raw AQI: ${valueOrDash(comp.final_aqi_raw)}`,
+      ].filter(Boolean).join("\n");
+    }
+
+    function valueOrDash(value) {
+      return value === undefined || value === null || value === "" ? "-" : value;
+    }
+
+    runBtn.addEventListener("click", runLookup);
+  </script>
+</body>
+</html>

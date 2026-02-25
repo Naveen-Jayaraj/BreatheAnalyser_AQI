@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aqi-pipeline"
+version = "0.1.0"
+description = "Coordinate-to-AQI engine for India with Django adapter"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "AQI Pipeline" }]
+dependencies = [
+  "h3>=4.1.0",
+  "requests>=2.31.0",
+  "Django>=5.0",
+  "djangorestframework>=3.15.0",
+  "celery>=5.4.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.0.0",
+  "pytest-cov>=5.0.0",
+]
+physics = [
+  "earthengine-api>=0.1.390",
+  "redis>=5.0.0",
+  "pandas>=2.0.0",
+  "pyarrow>=15.0.0",
+]
+backend = [
+  "fastapi>=0.115.0",
+  "uvicorn>=0.30.0",
+  "redis>=5.0.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["aqi_pipeline*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
