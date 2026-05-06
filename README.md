@@ -208,4 +208,5 @@ BreatheAnalyser_AQIAPP/
 ## 👥 Contributors
 
 - Naveen Jayaraj — naveenpainhouse@gmail.com
-- Shreya Ravi Kottayakkaran — shreyabah05@gmail.com
+- Aswin S— aswinsajeevorg@gmail.com
+-
